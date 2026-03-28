@@ -325,8 +325,9 @@ class UpdateScreenView extends StatelessWidget {
                               titleBuilder: (item) => item.name,
                               subtitleBuilder: (item) => item.address,
                               thumbnailBuilder: (item) => item.thumbnailUrl,
+                              thumbnailUrlsBuilder: (item) => item.imageUrls,
                               fallbackAsset: AssetsImages.constructionIgm,
-                              thumbnailWidth: 70,
+                              thumbnailWidth: 108,
                               thumbnailHeight: 39,
                               thumbnailBorderRadius: 4,
                               subtitleColor: isInterior
@@ -618,7 +619,6 @@ class UpdateScreenView extends StatelessWidget {
       },
     );
   }
-
 }
 
 class _AuthAwareAvatar extends StatefulWidget {

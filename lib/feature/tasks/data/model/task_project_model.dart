@@ -100,6 +100,7 @@ class TaskProjectModel extends TaskProjectEntity {
     required super.projectName,
     required super.projectAddress,
     super.thumbnailUrl,
+    super.imageUrls,
     required super.actionsNeededCount,
     required super.actionsNeededMessage,
     required super.sections,
@@ -126,15 +127,19 @@ class TaskProjectModel extends TaskProjectEntity {
         ? "Your decisions are required to keep progress on track"
         : "No actions needed right now";
 
-    final imageFromCollection = _extractString(
-      json["images"] ?? json["photos"] ?? json["attachments"],
-    );
-    final projectImageFromCollection = _extractString(
-      project["images"] ?? project["photos"] ?? project["attachments"],
-    );
+    final imageUrls = _readImageUrls(json);
+    final projectImageUrls = _readImageUrls(project);
+    final imageFromCollection = imageUrls.isEmpty ? '' : imageUrls.first;
+    final projectImageFromCollection = projectImageUrls.isEmpty
+        ? ''
+        : projectImageUrls.first;
     final genericImage = imageFromCollection.isNotEmpty
         ? imageFromCollection
         : projectImageFromCollection;
+    final mergedImageUrls = <String>[
+      ...imageUrls,
+      ...projectImageUrls.where((url) => !imageUrls.contains(url)),
+    ];
 
     final thumbnailUrl = _readString(
       json,
@@ -181,6 +186,7 @@ class TaskProjectModel extends TaskProjectEntity {
         ], fallback: "N/A"),
       ),
       thumbnailUrl: thumbnailUrl.isEmpty ? null : thumbnailUrl,
+      imageUrls: mergedImageUrls,
       actionsNeededCount: resolvedActionsCount,
       actionsNeededMessage: _readString(json, [
         "actionsNeededMessage",

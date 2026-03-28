@@ -13,6 +13,7 @@ class CategoryDropdownWidget<T> extends StatefulWidget {
   final String Function(T item) titleBuilder;
   final String Function(T item) subtitleBuilder;
   final String? Function(T item) thumbnailBuilder;
+  final List<String> Function(T item)? thumbnailUrlsBuilder;
   final String fallbackAsset;
 
   final Color? backgroundColor;
@@ -50,6 +51,7 @@ class CategoryDropdownWidget<T> extends StatefulWidget {
     required this.titleBuilder,
     required this.subtitleBuilder,
     required this.thumbnailBuilder,
+    this.thumbnailUrlsBuilder,
     required this.fallbackAsset,
     this.backgroundColor,
     this.borderColor,
@@ -231,6 +233,8 @@ class _CategoryDropdownWidgetState<T> extends State<CategoryDropdownWidget<T>> {
                                         subtitleBuilder: widget.subtitleBuilder,
                                         thumbnailBuilder:
                                             widget.thumbnailBuilder,
+                                        thumbnailUrlsBuilder:
+                                            widget.thumbnailUrlsBuilder,
                                         fallbackAsset: widget.fallbackAsset,
                                         titleColor: resolvedTitleColor,
                                         subtitleColor: resolvedSubtitleColor,
@@ -336,6 +340,7 @@ class _CategoryDropdownWidgetState<T> extends State<CategoryDropdownWidget<T>> {
                   titleBuilder: widget.titleBuilder,
                   subtitleBuilder: widget.subtitleBuilder,
                   thumbnailBuilder: widget.thumbnailBuilder,
+                  thumbnailUrlsBuilder: widget.thumbnailUrlsBuilder,
                   fallbackAsset: widget.fallbackAsset,
                   titleColor: resolvedTitleColor,
                   subtitleColor: resolvedSubtitleColor,
@@ -371,6 +376,7 @@ class _DropdownRow<T> extends StatelessWidget {
     required this.titleBuilder,
     required this.subtitleBuilder,
     required this.thumbnailBuilder,
+    required this.thumbnailUrlsBuilder,
     required this.fallbackAsset,
     required this.titleColor,
     required this.subtitleColor,
@@ -396,6 +402,7 @@ class _DropdownRow<T> extends StatelessWidget {
   final String Function(T item) titleBuilder;
   final String Function(T item) subtitleBuilder;
   final String? Function(T item) thumbnailBuilder;
+  final List<String> Function(T item)? thumbnailUrlsBuilder;
   final String fallbackAsset;
   final Color titleColor;
   final Color subtitleColor;
@@ -416,7 +423,14 @@ class _DropdownRow<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final thumbnailUrls = (thumbnailUrlsBuilder?.call(item) ?? const <String>[])
+        .map(_resolveThumbnailUrl)
+        .where((url) => url.isNotEmpty)
+        .toList();
     final thumb = _resolveThumbnailUrl(thumbnailBuilder(item));
+    final resolvedThumbs = thumbnailUrls.isNotEmpty
+        ? thumbnailUrls
+        : (thumb.isNotEmpty ? <String>[thumb] : const <String>[]);
 
     return Row(
       children: [
@@ -425,9 +439,9 @@ class _DropdownRow<T> extends StatelessWidget {
           child: SizedBox(
             height: thumbnailHeight,
             width: thumbnailWidth,
-            child: thumb.isNotEmpty
+            child: resolvedThumbs.isNotEmpty
                 ? _AuthorizedNetworkImage(
-                    imageUrl: thumb,
+                    imageUrl: resolvedThumbs.first,
                     fallbackAsset: fallbackAsset,
                   )
                 : Image.asset(fallbackAsset, fit: BoxFit.cover),

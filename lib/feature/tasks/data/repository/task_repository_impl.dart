@@ -267,9 +267,17 @@ List<TaskProjectEntity> _mergeWithProjectCatalog(
             row['photos'],
             row['attachments'],
           ]);
+    final resolvedImageUrls = <String>[
+      ...project.imageUrls,
+      ..._resolveProjectImageUrls(
+        row,
+        const <String, dynamic>{},
+      ).where((url) => !project.imageUrls.contains(url)),
+    ];
 
     if (useAddress == project.projectAddress &&
-        resolvedThumb == (project.thumbnailUrl ?? '').trim()) {
+        resolvedThumb == (project.thumbnailUrl ?? '').trim() &&
+        resolvedImageUrls.length == project.imageUrls.length) {
       return project;
     }
 
@@ -280,6 +288,7 @@ List<TaskProjectEntity> _mergeWithProjectCatalog(
       thumbnailUrl: resolvedThumb.isEmpty
           ? project.thumbnailUrl
           : resolvedThumb,
+      imageUrls: resolvedImageUrls,
       actionsNeededCount: project.actionsNeededCount,
       actionsNeededMessage: project.actionsNeededMessage,
       sections: project.sections,
@@ -347,6 +356,7 @@ List<TaskProjectEntity> _mergeWithProjectCatalog(
       projectName: name.isEmpty ? 'Untitled Project' : name,
       projectAddress: address.isEmpty ? 'N/A' : address,
       thumbnailUrl: thumbnail.isEmpty ? null : thumbnail,
+      imageUrls: _resolveProjectImageUrls(row, const <String, dynamic>{}),
       actionsNeededCount: 0,
       actionsNeededMessage: 'No actions needed right now',
       sections: const <TaskSectionEntity>[],
@@ -383,6 +393,9 @@ List<TaskProjectEntity> _hydrateMissingThumbnails(
       projectName: project.projectName,
       projectAddress: project.projectAddress,
       thumbnailUrl: resolved,
+      imageUrls: project.imageUrls.isEmpty
+          ? <String>[resolved]
+          : project.imageUrls,
       actionsNeededCount: project.actionsNeededCount,
       actionsNeededMessage: project.actionsNeededMessage,
       sections: project.sections,
@@ -447,6 +460,7 @@ List<TaskProjectEntity> _buildProjectsFromTaskRows(
       projectName: _resolveProjectName(taskRows.first, meta),
       projectAddress: _resolveProjectAddress(taskRows.first, meta),
       thumbnailUrl: _resolveProjectThumbnail(taskRows.first, meta),
+      imageUrls: _resolveProjectImageUrls(taskRows.first, meta),
       actionsNeededCount: actionsNeededCount,
       actionsNeededMessage: actionsNeededCount > 0
           ? 'Your decisions are required to keep progress on track'
@@ -593,6 +607,34 @@ String? _resolveProjectThumbnail(
   return value.isEmpty ? null : value;
 }
 
+List<String> _resolveProjectImageUrls(
+  Map<String, dynamic> row,
+  Map<String, dynamic> project,
+) {
+  return _collectImageValues(<dynamic>[
+    row['thumbnailUrl'],
+    row['thumbnail'],
+    row['thumb'],
+    row['imageUrl'],
+    row['image'],
+    row['coverImage'],
+    row['projectImage'],
+    row['images'],
+    row['photos'],
+    row['attachments'],
+    project['thumbnailUrl'],
+    project['thumbnail'],
+    project['thumb'],
+    project['imageUrl'],
+    project['image'],
+    project['coverImage'],
+    project['projectImage'],
+    project['images'],
+    project['photos'],
+    project['attachments'],
+  ]);
+}
+
 String _resolveSectionTitle(Map<String, dynamic> row) {
   final value = _firstNonEmpty(<dynamic>[
     row['section'],
@@ -620,6 +662,18 @@ String _firstImageValue(List<dynamic> values) {
     if (text.isNotEmpty) return text;
   }
   return '';
+}
+
+List<String> _collectImageValues(List<dynamic> values) {
+  final images = <String>[];
+  for (final value in values) {
+    for (final image in _extractImageTexts(value)) {
+      if (!images.contains(image)) {
+        images.add(image);
+      }
+    }
+  }
+  return images;
 }
 
 String _extractText(dynamic value) {
@@ -724,6 +778,60 @@ String _extractImageText(dynamic value) {
   }
 
   return '';
+}
+
+List<String> _extractImageTexts(dynamic value) {
+  if (value == null) return const <String>[];
+
+  if (value is String) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty || trimmed.toLowerCase() == 'null') {
+      return const <String>[];
+    }
+    return <String>[trimmed];
+  }
+
+  if (value is Map) {
+    const imageKeys = <String>[
+      'url',
+      'imageUrl',
+      'image_url',
+      'secureUrl',
+      'secure_url',
+      'src',
+      'path',
+      'location',
+      'thumbnailUrl',
+      'thumbnail',
+      'thumb',
+      'coverImage',
+      'image',
+      'projectImage',
+    ];
+    final images = <String>[];
+    for (final key in imageKeys) {
+      for (final image in _extractImageTexts(value[key])) {
+        if (!images.contains(image)) {
+          images.add(image);
+        }
+      }
+    }
+    return images;
+  }
+
+  if (value is List) {
+    final images = <String>[];
+    for (final item in value) {
+      for (final image in _extractImageTexts(item)) {
+        if (!images.contains(image)) {
+          images.add(image);
+        }
+      }
+    }
+    return images;
+  }
+
+  return const <String>[];
 }
 
 Map<String, dynamic> _extractMap(

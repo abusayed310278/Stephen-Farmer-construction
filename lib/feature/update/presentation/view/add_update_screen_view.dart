@@ -94,13 +94,16 @@ class _AddUpdateScreenViewState extends State<AddUpdateScreenView> {
                 ); // ✅ controller call
               },
             ),
-            if (_controller.draft.imageFile != null)
+            if (_controller.draft.imageFiles.isNotEmpty)
               ListTile(
                 leading: Icon(Icons.delete_outline, color: muted),
-                title: Text('Remove', style: TextStyle(color: muted)),
+                title: Text(
+                  'Remove all photos',
+                  style: TextStyle(color: muted),
+                ),
                 onTap: () {
                   Navigator.pop(ctx);
-                  _controller.removePhoto(); // ✅ controller call
+                  _controller.clearPhotos(); // ✅ controller call
                 },
               ),
           ],
@@ -271,7 +274,7 @@ class _AddUpdateScreenViewState extends State<AddUpdateScreenView> {
                           color: card.withValues(alpha: 0.35),
                           borderRadius: BorderRadius.circular(22),
                         ),
-                        child: _controller.draft.imageFile == null
+                        child: _controller.draft.imageFiles.isEmpty
                             ? Center(
                                 child: Column(
                                   mainAxisSize: MainAxisSize.min,
@@ -307,13 +310,105 @@ class _AddUpdateScreenViewState extends State<AddUpdateScreenView> {
                                   ],
                                 ),
                               )
-                            : ClipRRect(
-                                borderRadius: BorderRadius.circular(22),
-                                child: Image.file(
-                                  _controller.draft.imageFile!,
-                                  fit: BoxFit.cover,
-                                  width: double.infinity,
-                                  height: double.infinity,
+                            : Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Text(
+                                          '${_controller.draft.imageFiles.length} site photo${_controller.draft.imageFiles.length == 1 ? '' : 's'} selected',
+                                          style: GoogleFonts.manrope(
+                                            color: titleColor,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        const Spacer(),
+                                        TextButton(
+                                          onPressed: isPosting
+                                              ? null
+                                              : _showPickSheet,
+                                          style: TextButton.styleFrom(
+                                            foregroundColor: accent,
+                                            padding: EdgeInsets.zero,
+                                            minimumSize: Size.zero,
+                                            tapTargetSize: MaterialTapTargetSize
+                                                .shrinkWrap,
+                                          ),
+                                          child: Text(
+                                            'Add more',
+                                            style: GoogleFonts.manrope(
+                                              color: accent,
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Expanded(
+                                      child: GridView.builder(
+                                        itemCount:
+                                            _controller.draft.imageFiles.length,
+                                        gridDelegate:
+                                            const SliverGridDelegateWithFixedCrossAxisCount(
+                                              crossAxisCount: 3,
+                                              crossAxisSpacing: 10,
+                                              mainAxisSpacing: 10,
+                                              childAspectRatio: 1,
+                                            ),
+                                        itemBuilder: (context, index) {
+                                          final file = _controller
+                                              .draft
+                                              .imageFiles[index];
+                                          return Stack(
+                                            fit: StackFit.expand,
+                                            children: [
+                                              ClipRRect(
+                                                borderRadius:
+                                                    BorderRadius.circular(14),
+                                                child: Image.file(
+                                                  file,
+                                                  fit: BoxFit.cover,
+                                                ),
+                                              ),
+                                              Positioned(
+                                                top: 6,
+                                                right: 6,
+                                                child: GestureDetector(
+                                                  onTap: isPosting
+                                                      ? null
+                                                      : () => _controller
+                                                            .removePhotoAt(
+                                                              index,
+                                                            ),
+                                                  child: Container(
+                                                    width: 24,
+                                                    height: 24,
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.black
+                                                          .withValues(
+                                                            alpha: 0.6,
+                                                          ),
+                                                      shape: BoxShape.circle,
+                                                    ),
+                                                    child: const Icon(
+                                                      Icons.close,
+                                                      size: 16,
+                                                      color: Colors.white,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                       ),

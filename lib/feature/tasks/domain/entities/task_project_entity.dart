@@ -73,6 +73,7 @@ class TaskProjectEntity {
   final String projectName;
   final String projectAddress;
   final String? thumbnailUrl;
+  final List<String> imageUrls;
   final int actionsNeededCount;
   final String actionsNeededMessage;
   final List<TaskSectionEntity> sections;
@@ -82,6 +83,7 @@ class TaskProjectEntity {
     required this.projectName,
     required this.projectAddress,
     this.thumbnailUrl,
+    this.imageUrls = const [],
     required this.actionsNeededCount,
     required this.actionsNeededMessage,
     required this.sections,

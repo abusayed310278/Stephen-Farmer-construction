@@ -17,33 +17,38 @@ class PostRepositoryImpl implements PostRepository {
     : _apiClient = apiClient ?? Get.find<ApiClient>();
 
   @override
-  Future<File?> pickImage(PhotoSource source) async {
-    if (source == PhotoSource.camera && !await CameraUtils.isCameraAvailable()) {
-      return null;
+  Future<List<File>> pickImages(PhotoSource source) async {
+    if (source == PhotoSource.camera &&
+        !await CameraUtils.isCameraAvailable()) {
+      return const <File>[];
     }
 
-    final ImageSource imgSource = source == PhotoSource.camera
-        ? ImageSource.camera
-        : ImageSource.gallery;
+    if (source == PhotoSource.gallery) {
+      final List<XFile> files = await _picker.pickMultiImage(
+        imageQuality: 85,
+        maxWidth: 2000,
+      );
+      return files.map((file) => File(file.path)).toList();
+    }
 
-    final XFile? x = await _picker.pickImage(
-      source: imgSource,
+    final XFile? file = await _picker.pickImage(
+      source: ImageSource.camera,
       imageQuality: 85,
       maxWidth: 2000,
     );
 
-    if (x == null) return null;
-    return File(x.path);
+    if (file == null) return const <File>[];
+    return <File>[File(file.path)];
   }
 
   @override
   Future<void> createPost({
     required String projectId,
     required String description,
-    required File? imageFile,
+    required List<File> imageFiles,
   }) async {
     final images = <MultipartFile>[];
-    if (imageFile != null) {
+    for (final imageFile in imageFiles) {
       images.add(await MultipartFile.fromFile(imageFile.path));
     }
 

@@ -3,12 +3,14 @@ class UpdateProjectModel {
   final String name;
   final String address;
   final String? thumbnailUrl;
+  final List<String> imageUrls;
 
   const UpdateProjectModel({
     required this.id,
     required this.name,
     required this.address,
     this.thumbnailUrl,
+    this.imageUrls = const [],
   });
 
   factory UpdateProjectModel.fromJson(Map<String, dynamic> json) {
@@ -31,9 +33,10 @@ class UpdateProjectModel {
       'imageUrl',
       'projectImage',
     ]);
-    final thumbFromImages = _extractString(
+    final imageUrls = _extractStringList(
       json['images'] ?? json['photos'] ?? json['attachments'],
     );
+    final thumbFromImages = imageUrls.isEmpty ? '' : imageUrls.first;
     final thumb = thumbFromFields.isNotEmpty
         ? thumbFromFields
         : thumbFromImages;
@@ -43,6 +46,7 @@ class UpdateProjectModel {
       name: readFirst(['projectName', 'name', 'title'], fallback: 'Project'),
       address: readFirst(['address', 'location', 'projectAddress']),
       thumbnailUrl: thumb.isEmpty ? null : thumb,
+      imageUrls: imageUrls,
     );
   }
 }
@@ -365,6 +369,27 @@ String _extractString(dynamic value) {
   }
 
   return '';
+}
+
+List<String> _extractStringList(dynamic value) {
+  final items = <String>[];
+
+  void addCandidate(dynamic candidate) {
+    final text = _extractString(candidate);
+    if (text.isNotEmpty && !items.contains(text)) {
+      items.add(text);
+    }
+  }
+
+  if (value is List) {
+    for (final item in value) {
+      addCandidate(item);
+    }
+    return items;
+  }
+
+  addCandidate(value);
+  return items;
 }
 
 int? _asInt(dynamic value) {

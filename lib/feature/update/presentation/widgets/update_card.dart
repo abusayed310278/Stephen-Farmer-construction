@@ -46,9 +46,10 @@ class UpdatePostCard extends StatelessWidget {
 
     final fallbackImage =
         'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?w=900&auto=format&fit=crop';
-    final postImage = (item.thumbnailUrl?.trim().isNotEmpty ?? false)
-        ? item.thumbnailUrl!.trim()
-        : fallbackImage;
+    final postImages = item.imageUrls
+        .map(_resolveMediaUrl)
+        .where((url) => url.isNotEmpty)
+        .toList();
 
     return Container(
       decoration: BoxDecoration(
@@ -104,18 +105,11 @@ class UpdatePostCard extends StatelessWidget {
             textColor: contentTextColor,
           ),
           const SizedBox(height: 12),
-          SizedBox(
-            height: 220,
-            width: double.infinity,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: Image.network(
-                postImage,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) =>
-                    Image.network(fallbackImage, fit: BoxFit.cover),
-              ),
-            ),
+          _PostImageCollage(
+            imageUrls: postImages.isEmpty
+                ? <String>[fallbackImage]
+                : postImages,
+            fallbackImage: fallbackImage,
           ),
           const SizedBox(height: 12),
           Row(
@@ -180,6 +174,271 @@ class UpdatePostCard extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+String _resolveMediaUrl(String raw) {
+  final value = raw.trim().replaceAll('\\', '/');
+  if (value.isEmpty || value.toLowerCase() == 'null') return '';
+
+  if (value.startsWith('{') && value.contains('url:')) {
+    final match = RegExp(r'url:\s*([^,}]+)').firstMatch(value);
+    final extracted = match?.group(1)?.trim() ?? '';
+    if (extracted.isEmpty) return '';
+    return _resolveMediaUrl(extracted);
+  }
+
+  final lower = value.toLowerCase();
+  if (lower.startsWith('http://') || lower.startsWith('https://')) {
+    return value;
+  }
+  if (value.startsWith('//')) return 'https:$value';
+
+  final trimmed = baseUrl.trim();
+  if (trimmed.isEmpty) return value;
+  final normalized = trimmed.replaceFirst(RegExp(r'/api/v\d+/?$'), '');
+  final uri = Uri.tryParse(normalized);
+  if (uri == null || uri.host.isEmpty) return normalized;
+
+  var host = uri.host;
+  if (!kIsWeb &&
+      defaultTargetPlatform == TargetPlatform.android &&
+      (host == 'localhost' || host == '127.0.0.1')) {
+    host = '10.0.2.2';
+  }
+
+  final origin = Uri(
+    scheme: uri.scheme,
+    host: host,
+    port: uri.hasPort ? uri.port : null,
+  ).toString();
+
+  if (value.startsWith('/')) return '$origin$value';
+  return '$origin/$value';
+}
+
+class _PostImageCollage extends StatelessWidget {
+  const _PostImageCollage({
+    required this.imageUrls,
+    required this.fallbackImage,
+  });
+
+  final List<String> imageUrls;
+  final String fallbackImage;
+
+  @override
+  Widget build(BuildContext context) {
+    final images = imageUrls.take(4).toList();
+
+    return SizedBox(
+      height: images.length == 1 ? 220 : 260,
+      width: double.infinity,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: _buildLayout(context, images),
+      ),
+    );
+  }
+
+  Widget _buildLayout(BuildContext context, List<String> images) {
+    if (images.length == 1) {
+      return _buildImage(context, images[0], 0);
+    }
+
+    if (images.length == 2) {
+      return Row(
+        children: [
+          Expanded(child: _buildImage(context, images[0], 0)),
+          const SizedBox(width: 4),
+          Expanded(child: _buildImage(context, images[1], 1)),
+        ],
+      );
+    }
+
+    if (images.length == 3) {
+      return Row(
+        children: [
+          Expanded(child: _buildImage(context, images[0], 0)),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Column(
+              children: [
+                Expanded(child: _buildImage(context, images[1], 1)),
+                const SizedBox(height: 4),
+                Expanded(child: _buildImage(context, images[2], 2)),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Column(
+      children: [
+        Expanded(
+          child: Row(
+            children: [
+              Expanded(child: _buildImage(context, images[0], 0)),
+              const SizedBox(width: 4),
+              Expanded(child: _buildImage(context, images[1], 1)),
+            ],
+          ),
+        ),
+        const SizedBox(height: 4),
+        Expanded(
+          child: Row(
+            children: [
+              Expanded(child: _buildImage(context, images[2], 2)),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    _buildImage(context, images[3], 3),
+                    if (imageUrls.length > 4)
+                      Container(
+                        color: Colors.black.withValues(alpha: 0.45),
+                        alignment: Alignment.center,
+                        child: Text(
+                          '+${imageUrls.length - 4}',
+                          style: GoogleFonts.manrope(
+                            color: Colors.white,
+                            fontSize: 24,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildImage(BuildContext context, String url, int index) {
+    return InkWell(
+      onTap: () => _openGallery(context, index),
+      child: Image.network(
+        url,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) =>
+            Image.network(fallbackImage, fit: BoxFit.cover),
+      ),
+    );
+  }
+
+  void _openGallery(BuildContext context, int initialIndex) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => _PostImageGalleryView(
+          imageUrls: imageUrls,
+          fallbackImage: fallbackImage,
+          initialIndex: initialIndex,
+        ),
+      ),
+    );
+  }
+}
+
+class _PostImageGalleryView extends StatefulWidget {
+  const _PostImageGalleryView({
+    required this.imageUrls,
+    required this.fallbackImage,
+    required this.initialIndex,
+  });
+
+  final List<String> imageUrls;
+  final String fallbackImage;
+  final int initialIndex;
+
+  @override
+  State<_PostImageGalleryView> createState() => _PostImageGalleryViewState();
+}
+
+class _PostImageGalleryViewState extends State<_PostImageGalleryView> {
+  late final PageController _pageController;
+  late int _currentIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialIndex;
+    _pageController = PageController(initialPage: widget.initialIndex);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        child: Stack(
+          children: [
+            PageView.builder(
+              controller: _pageController,
+              itemCount: widget.imageUrls.length,
+              onPageChanged: (index) {
+                setState(() => _currentIndex = index);
+              },
+              itemBuilder: (context, index) {
+                return InteractiveViewer(
+                  minScale: 1,
+                  maxScale: 4,
+                  child: Center(
+                    child: Image.network(
+                      widget.imageUrls[index],
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => Image.network(
+                        widget.fallbackImage,
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+            Positioned(
+              top: 12,
+              left: 12,
+              child: IconButton(
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+              ),
+            ),
+            Positioned(
+              top: 18,
+              right: 20,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.45),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  '${_currentIndex + 1}/${widget.imageUrls.length}',
+                  style: GoogleFonts.manrope(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
