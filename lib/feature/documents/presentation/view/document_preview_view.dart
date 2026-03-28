@@ -1,14 +1,38 @@
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
+import 'package:stephen_farmer/core/network/api_service/api_client.dart';
+import 'package:stephen_farmer/core/network/api_service/api_endpoints.dart';
 import 'package:stephen_farmer/core/common/role_bg_color.dart';
 import 'package:stephen_farmer/feature/auth/presentation/controller/login_controller.dart';
 import 'package:stephen_farmer/feature/documents/domain/entities/document_project_entity.dart';
 
-class DocumentPreviewView extends StatelessWidget {
+class DocumentPreviewView extends StatefulWidget {
   const DocumentPreviewView({super.key, required this.item});
 
   final RecentDocumentEntity item;
+
+  @override
+  State<DocumentPreviewView> createState() => _DocumentPreviewViewState();
+}
+
+class _DocumentPreviewViewState extends State<DocumentPreviewView> {
+  late final Future<Uint8List> _pdfBytesFuture;
+
+  RecentDocumentEntity get item => widget.item;
+
+  @override
+  void initState() {
+    super.initState();
+    final url = item.fileUrl?.trim() ?? '';
+    _pdfBytesFuture = _isPdfDocument(url, item.mimeType)
+        ? _loadPdfBytes(url)
+        : Future<Uint8List>.value(Uint8List(0));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -75,25 +99,39 @@ class DocumentPreviewView extends StatelessWidget {
       );
     }
 
-    if (!_isImageDocument(url, item.mimeType)) {
-      return _messageBox(
+    if (_isPdfDocument(url, item.mimeType)) {
+      return _previewContainer(
         isInterior: isInterior,
-        text:
-            'Preview not available for this file type.\nURL: $url',
+        child: FutureBuilder<Uint8List>(
+          future: _pdfBytesFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            if (snapshot.hasError ||
+                !snapshot.hasData ||
+                snapshot.data!.isEmpty) {
+              return _messageBox(
+                isInterior: isInterior,
+                text: 'Failed to load the selected PDF document.',
+              );
+            }
+
+            return SfPdfViewer.memory(
+              snapshot.data!,
+              canShowScrollHead: true,
+              canShowScrollStatus: true,
+              pageLayoutMode: PdfPageLayoutMode.single,
+            );
+          },
+        ),
       );
     }
 
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: isInterior ? const Color(0xFFBFC3C5) : const Color(0xFF2D3840),
-        ),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(10),
+    if (_isImageDocument(url, item.mimeType)) {
+      return _previewContainer(
+        isInterior: isInterior,
         child: InteractiveViewer(
           minScale: 1,
           maxScale: 5,
@@ -112,8 +150,65 @@ class DocumentPreviewView extends StatelessWidget {
             },
           ),
         ),
-      ),
+      );
+    }
+
+    return _messageBox(
+      isInterior: isInterior,
+      text: 'Preview not available for this file type.\nURL: $url',
     );
+  }
+
+  Widget _previewContainer({required bool isInterior, required Widget child}) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isInterior ? const Color(0xFFBFC3C5) : const Color(0xFF2D3840),
+        ),
+      ),
+      child: ClipRRect(borderRadius: BorderRadius.circular(10), child: child),
+    );
+  }
+
+  bool _isPdfDocument(String url, String? mimeType) {
+    final mime = (mimeType ?? '').toLowerCase();
+    if (mime == 'application/pdf') return true;
+
+    final lower = url.toLowerCase();
+    return lower.endsWith('.pdf');
+  }
+
+  Future<Uint8List> _loadPdfBytes(String url) async {
+    final documentId = item.id.trim();
+    if (documentId.isEmpty) {
+      throw Exception('Document ID is missing.');
+    }
+
+    final apiClient = Get.find<ApiClient>();
+    final response = await apiClient.dio.get<List<int>>(
+      DocumentEndpoints.getContent(documentId),
+      options: Options(responseType: ResponseType.bytes),
+    );
+    final bytes = response.data;
+    if (bytes == null || bytes.isEmpty) {
+      throw Exception('Document content response was empty.');
+    }
+    return Uint8List.fromList(bytes);
+  }
+
+  bool _isImageDocument(String url, String? mimeType) {
+    final mime = (mimeType ?? '').toLowerCase();
+    if (mime.startsWith('image/')) return true;
+
+    final lower = url.toLowerCase();
+    return lower.endsWith('.png') ||
+        lower.endsWith('.jpg') ||
+        lower.endsWith('.jpeg') ||
+        lower.endsWith('.webp') ||
+        lower.endsWith('.gif');
   }
 
   Widget _messageBox({required bool isInterior, required String text}) {
@@ -132,24 +227,14 @@ class DocumentPreviewView extends StatelessWidget {
           text,
           textAlign: TextAlign.center,
           style: GoogleFonts.manrope(
-            color: isInterior ? const Color(0xFF46413A) : const Color(0xFFD5DDE1),
+            color: isInterior
+                ? const Color(0xFF46413A)
+                : const Color(0xFFD5DDE1),
             fontSize: 13,
             fontWeight: FontWeight.w500,
           ),
         ),
       ),
     );
-  }
-
-  bool _isImageDocument(String url, String? mimeType) {
-    final mime = (mimeType ?? '').toLowerCase();
-    if (mime.startsWith('image/')) return true;
-
-    final lower = url.toLowerCase();
-    return lower.endsWith('.png') ||
-        lower.endsWith('.jpg') ||
-        lower.endsWith('.jpeg') ||
-        lower.endsWith('.webp') ||
-        lower.endsWith('.gif');
   }
 }

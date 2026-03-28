@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -121,7 +120,6 @@ class _UpdateCommentsViewState extends State<UpdateCommentsView> {
   @override
   Widget build(BuildContext context) {
     final isInterior = widget.isInterior;
-    final showBackButton = defaultTargetPlatform == TargetPlatform.android;
     final panelColor = isInterior
         ? const Color(0xFFD6D1C7)
         : const Color(0xFF111B21);
@@ -139,13 +137,11 @@ class _UpdateCommentsViewState extends State<UpdateCommentsView> {
         backgroundColor: panelColor,
         elevation: 0,
         automaticallyImplyLeading: false,
-        leading: showBackButton
-            ? IconButton(
-                onPressed: () => Get.back<void>(),
-                icon: const Icon(Icons.chevron_left_rounded),
-                color: titleColor,
-              )
-            : null,
+        leading: IconButton(
+          onPressed: () => Get.back<void>(),
+          icon: const Icon(Icons.arrow_back),
+          color: titleColor,
+        ),
         title: Text(
           'Comments',
           style: GoogleFonts.manrope(
