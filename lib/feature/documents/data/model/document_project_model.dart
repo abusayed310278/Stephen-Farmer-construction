@@ -36,25 +36,41 @@ class RecentDocumentModel extends RecentDocumentEntity {
     ]);
 
     final nestedDocument = json['document'];
-    final nestedUrl = nestedDocument is Map<String, dynamic>
-        ? _readString(nestedDocument, ['url', 'secure_url', 'path'])
+    final nestedDocumentMap = nestedDocument is Map<String, dynamic>
+        ? nestedDocument
+        : null;
+    final nestedUrl = nestedDocumentMap != null
+        ? _readString(nestedDocumentMap, [
+            'url',
+            'secure_url',
+            'path',
+            'fileUrl',
+            'documentUrl',
+          ])
         : '';
     final directUrl = _readString(json, ['url', 'fileUrl', 'documentUrl']);
     final resolvedUrl = directUrl.trim().isNotEmpty
         ? directUrl.trim()
         : nestedUrl.trim();
+    final nestedTitle = nestedDocumentMap != null
+        ? _readString(nestedDocumentMap, ['title', 'name', 'originalName'])
+        : '';
+    final resolvedTitle = _readString(json, [
+      'title',
+      'name',
+      'originalName',
+    ], fallback: nestedTitle.isNotEmpty ? nestedTitle : 'Untitled Document');
+    final nestedId = nestedDocumentMap != null
+        ? _readString(nestedDocumentMap, ['_id', 'id', 'documentId'])
+        : '';
 
     return RecentDocumentModel(
-      id: _readString(json, ['_id', 'id', 'documentId']),
-      title: _readString(json, [
-        'title',
-        'name',
-        'originalName',
-      ], fallback: 'Untitled Document'),
+      id: _readString(json, ['_id', 'id', 'documentId'], fallback: nestedId),
+      title: resolvedTitle,
       category: _readString(json, ['category', 'type'], fallback: 'General'),
       dateLabel: _formatDateLabel(dateSource),
       fileUrl: resolvedUrl.isEmpty ? null : resolvedUrl,
-      mimeType: _readMimeType(json),
+      mimeType: _readMimeType(json, nestedDocumentMap),
     );
   }
 }
@@ -341,10 +357,22 @@ String _formatDateLabel(String source) {
   return '${months[local.month - 1]} ${local.day}';
 }
 
-String? _readMimeType(Map<String, dynamic> json) {
+String? _readMimeType(Map<String, dynamic> json, dynamic nestedDocument) {
   final direct = _readString(json, ['mimeType']);
   if (direct.trim().isNotEmpty) {
     return direct.trim();
+  }
+
+  if (nestedDocument is Map<String, dynamic>) {
+    final nestedDirect = _readString(nestedDocument, [
+      'mimeType',
+      'mime_type',
+      'contentType',
+      'type',
+    ]);
+    if (nestedDirect.trim().isNotEmpty) {
+      return nestedDirect.trim();
+    }
   }
 
   final meta = json['meta'];

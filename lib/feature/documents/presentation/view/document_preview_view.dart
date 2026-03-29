@@ -1,12 +1,12 @@
-import 'dart:typed_data';
-
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:stephen_farmer/core/network/api_service/api_client.dart';
 import 'package:stephen_farmer/core/network/api_service/api_endpoints.dart';
+import 'package:stephen_farmer/core/network/api_service/token_meneger.dart';
 import 'package:stephen_farmer/core/common/role_bg_color.dart';
 import 'package:stephen_farmer/feature/auth/presentation/controller/login_controller.dart';
 import 'package:stephen_farmer/feature/documents/domain/entities/document_project_entity.dart';
@@ -25,12 +25,13 @@ class _DocumentPreviewViewState extends State<DocumentPreviewView> {
 
   RecentDocumentEntity get item => widget.item;
 
+  String get _documentUrl => item.fileUrl?.trim() ?? '';
+
   @override
   void initState() {
     super.initState();
-    final url = item.fileUrl?.trim() ?? '';
-    _pdfBytesFuture = _isPdfDocument(url, item.mimeType)
-        ? _loadPdfBytes(url)
+    _pdfBytesFuture = _isPdfDocument(_documentUrl, item.mimeType, item.title)
+        ? _loadPdfBytes()
         : Future<Uint8List>.value(Uint8List(0));
   }
 
@@ -91,15 +92,17 @@ class _DocumentPreviewViewState extends State<DocumentPreviewView> {
   }
 
   Widget _buildPreview(BuildContext context, bool isInterior) {
-    final url = item.fileUrl?.trim() ?? '';
-    if (url.isEmpty) {
+    final isPdf = _isPdfDocument(_documentUrl, item.mimeType, item.title);
+    final isImage = _isImageDocument(_documentUrl, item.mimeType, item.title);
+
+    if (!isPdf && !isImage && _documentUrl.isEmpty) {
       return _messageBox(
         isInterior: isInterior,
         text: 'No document URL found for this file.',
       );
     }
 
-    if (_isPdfDocument(url, item.mimeType)) {
+    if (isPdf) {
       return _previewContainer(
         isInterior: isInterior,
         child: FutureBuilder<Uint8List>(
@@ -129,14 +132,14 @@ class _DocumentPreviewViewState extends State<DocumentPreviewView> {
       );
     }
 
-    if (_isImageDocument(url, item.mimeType)) {
+    if (isImage) {
       return _previewContainer(
         isInterior: isInterior,
         child: InteractiveViewer(
           minScale: 1,
           maxScale: 5,
           child: Image.network(
-            url,
+            _documentUrl,
             fit: BoxFit.contain,
             loadingBuilder: (context, child, progress) {
               if (progress == null) return child;
@@ -155,7 +158,7 @@ class _DocumentPreviewViewState extends State<DocumentPreviewView> {
 
     return _messageBox(
       isInterior: isInterior,
-      text: 'Preview not available for this file type.\nURL: $url',
+      text: 'Preview not available for this file type.\nURL: $_documentUrl',
     );
   }
 
@@ -173,42 +176,132 @@ class _DocumentPreviewViewState extends State<DocumentPreviewView> {
     );
   }
 
-  bool _isPdfDocument(String url, String? mimeType) {
+  bool _isPdfDocument(String url, String? mimeType, String title) {
     final mime = (mimeType ?? '').toLowerCase();
     if (mime == 'application/pdf') return true;
-
-    final lower = url.toLowerCase();
-    return lower.endsWith('.pdf');
+    return _pathLooksLike(url, '.pdf') || title.toLowerCase().endsWith('.pdf');
   }
 
-  Future<Uint8List> _loadPdfBytes(String url) async {
+  Future<Uint8List> _loadPdfBytes() async {
+    if (_documentUrl.isNotEmpty) {
+      try {
+        final urlBytes = await _loadPdfFromUrl(_documentUrl);
+        if (urlBytes.isNotEmpty) {
+          return urlBytes;
+        }
+      } catch (_) {
+        // Fall back to the authenticated content endpoint below.
+      }
+    }
+
     final documentId = item.id.trim();
     if (documentId.isEmpty) {
       throw Exception('Document ID is missing.');
     }
 
     final apiClient = Get.find<ApiClient>();
-    final response = await apiClient.dio.get<List<int>>(
+    final response = await apiClient.dio.get<dynamic>(
       DocumentEndpoints.getContent(documentId),
       options: Options(responseType: ResponseType.bytes),
     );
-    final bytes = response.data;
-    if (bytes == null || bytes.isEmpty) {
+    final bytes = _extractBytes(response.data);
+    if (bytes.isEmpty) {
       throw Exception('Document content response was empty.');
     }
-    return Uint8List.fromList(bytes);
+    return bytes;
   }
 
-  bool _isImageDocument(String url, String? mimeType) {
+  Future<Uint8List> _loadPdfFromUrl(String rawUrl) async {
+    final uri = Uri.tryParse(rawUrl.trim());
+    if (uri == null || !uri.hasScheme) {
+      throw Exception('Invalid document URL.');
+    }
+
+    final token = await TokenManager.getToken();
+    final response = await Dio().get<dynamic>(
+      uri.toString(),
+      options: Options(
+        responseType: ResponseType.bytes,
+        headers: _authHeadersFor(uri, token),
+        followRedirects: true,
+      ),
+    );
+
+    final bytes = _extractBytes(response.data);
+    if (bytes.isEmpty) {
+      throw Exception('Document URL response was empty.');
+    }
+    return bytes;
+  }
+
+  bool _isImageDocument(String url, String? mimeType, String title) {
     final mime = (mimeType ?? '').toLowerCase();
     if (mime.startsWith('image/')) return true;
+    final lowerTitle = title.toLowerCase();
+    return _pathLooksLike(url, '.png') ||
+        _pathLooksLike(url, '.jpg') ||
+        _pathLooksLike(url, '.jpeg') ||
+        _pathLooksLike(url, '.webp') ||
+        _pathLooksLike(url, '.gif') ||
+        lowerTitle.endsWith('.png') ||
+        lowerTitle.endsWith('.jpg') ||
+        lowerTitle.endsWith('.jpeg') ||
+        lowerTitle.endsWith('.webp') ||
+        lowerTitle.endsWith('.gif');
+  }
 
-    final lower = url.toLowerCase();
-    return lower.endsWith('.png') ||
-        lower.endsWith('.jpg') ||
-        lower.endsWith('.jpeg') ||
-        lower.endsWith('.webp') ||
-        lower.endsWith('.gif');
+  bool _pathLooksLike(String raw, String extension) {
+    final value = raw.trim();
+    if (value.isEmpty) return false;
+
+    final uri = Uri.tryParse(value);
+    final path = (uri?.path.isNotEmpty == true ? uri!.path : value)
+        .toLowerCase();
+    return path.endsWith(extension);
+  }
+
+  String _apiOrigin() {
+    final trimmed = baseUrl.trim();
+    if (trimmed.isEmpty) return '';
+    final normalized = trimmed.replaceFirst(RegExp(r'/api/v\d+/?$'), '');
+    final uri = Uri.tryParse(normalized);
+    if (uri == null || uri.host.isEmpty) return normalized;
+
+    var host = uri.host;
+    if (!kIsWeb &&
+        defaultTargetPlatform == TargetPlatform.android &&
+        (host == 'localhost' || host == '127.0.0.1')) {
+      host = '10.0.2.2';
+    }
+
+    return Uri(
+      scheme: uri.scheme,
+      host: host,
+      port: uri.hasPort ? uri.port : null,
+    ).toString();
+  }
+
+  Map<String, String>? _authHeadersFor(Uri uri, String? token) {
+    final trimmedToken = token?.trim() ?? '';
+    if (trimmedToken.isEmpty) return null;
+
+    final apiHost = Uri.tryParse(_apiOrigin())?.host ?? '';
+    if (apiHost.isEmpty || uri.host != apiHost) return null;
+
+    return <String, String>{'Authorization': 'Bearer $trimmedToken'};
+  }
+
+  Uint8List _extractBytes(dynamic data) {
+    if (data is Uint8List) {
+      return data;
+    }
+    if (data is List<int>) {
+      return Uint8List.fromList(data);
+    }
+    if (data is List) {
+      return Uint8List.fromList(data.whereType<int>().toList(growable: false));
+    }
+    throw Exception('Unexpected document content format.');
   }
 
   Widget _messageBox({required bool isInterior, required String text}) {
