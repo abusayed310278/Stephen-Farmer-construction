@@ -298,15 +298,21 @@ class _PostImageCollage extends StatelessWidget {
                   children: [
                     _buildImage(context, images[3], 3),
                     if (imageUrls.length > 4)
-                      Container(
-                        color: Colors.black.withValues(alpha: 0.45),
-                        alignment: Alignment.center,
-                        child: Text(
-                          '+${imageUrls.length - 4}',
-                          style: GoogleFonts.manrope(
-                            color: Colors.white,
-                            fontSize: 24,
-                            fontWeight: FontWeight.w800,
+                      Positioned.fill(
+                        child: Material(
+                          color: Colors.black.withValues(alpha: 0.45),
+                          child: InkWell(
+                            onTap: () => _openGallery(context, 3),
+                            child: Center(
+                              child: Text(
+                                '+${imageUrls.length - 4}',
+                                style: GoogleFonts.manrope(
+                                  color: Colors.white,
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
                           ),
                         ),
                       ),
